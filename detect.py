@@ -37,13 +37,12 @@ def main(_argv):
 
     # image_data = utils.image_preprocess(np.copy(original_image), [input_size, input_size])
     image_data = cv2.resize(original_image, (input_width, input_height))
-    image_data = image_data / 255.
+    image_data = np.float32(image_data / 255.)
     # image_data = image_data[np.newaxis, ...].astype(np.float32)
 
-    images_data = []
-    for i in range(1):
-        images_data.append(image_data)
-    images_data = np.asarray(images_data).astype(np.float32)
+    empty_img = np.empty([input_height, input_width, 3], np.float32)
+    # Create batch width 3 images
+    images_data = np.stack([image_data, empty_img, empty_img])
 
     if FLAGS.framework == 'tflite':
         interpreter = tf.lite.Interpreter(model_path=FLAGS.weights)
@@ -58,7 +57,9 @@ def main(_argv):
         if FLAGS.model == 'yolov3' and FLAGS.tiny == True:
             boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25, input_shape=tf.constant([input_height, input_width]))
         else:
-            boxes, pred_conf = filter_boxes(pred[0], pred[1], score_threshold=0.25, input_shape=tf.constant([input_height, input_width]))
+            boxes = pred[2]
+            scores = pred[0]
+            valid_detections = pred[1]
     else:
         saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
         infer = saved_model_loaded.signatures['serving_default']
@@ -68,16 +69,7 @@ def main(_argv):
             boxes = value[:, :, 0:4]
             pred_conf = value[:, :, 4:]
 
-    boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
-        boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
-        scores=tf.reshape(
-            pred_conf, (tf.shape(pred_conf)[0], -1, tf.shape(pred_conf)[-1])),
-        max_output_size_per_class=50,
-        max_total_size=50,
-        iou_threshold=FLAGS.iou,
-        score_threshold=FLAGS.score
-    )
-    pred_bbox = [boxes.numpy(), scores.numpy(), classes.numpy(), valid_detections.numpy()]
+    pred_bbox = [boxes, scores, valid_detections]
     image = utils.draw_bbox(original_image, pred_bbox)
     # image = utils.draw_bbox(image_data*255, pred_bbox)
     image = Image.fromarray(image.astype(np.uint8))

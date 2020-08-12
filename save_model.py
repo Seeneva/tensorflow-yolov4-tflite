@@ -43,11 +43,9 @@ def save_tf():
       prob_tensors.append(output_tensors[1])
   pred_bbox = tf.concat(bbox_tensors, axis=1)
   pred_prob = tf.concat(prob_tensors, axis=1)
-  if FLAGS.framework == 'tflite':
-    pred = filter_boxes(pred_bbox, pred_prob, iou_threshold=FLAGS.iou_thres, score_threshold=FLAGS.score_thres, input_shape=[input_height, input_width])
-  else:
-    boxes, pred_conf = filter_boxes(pred_bbox, pred_prob, score_threshold=FLAGS.score_thres, input_shape=tf.constant([input_height, input_width]))
-    pred = tf.concat([boxes, pred_conf], axis=-1)
+  
+  pred = filter_boxes(pred_bbox, pred_prob, iou_threshold=FLAGS.iou_thres, score_threshold=FLAGS.score_thres, input_shape=[input_height, input_width])
+
   model = tf.keras.Model(input_layer, pred)
   utils.load_weights(model, FLAGS.weights, FLAGS.model, FLAGS.tiny)
   model.summary()

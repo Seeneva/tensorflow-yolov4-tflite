@@ -9,6 +9,7 @@ flags.DEFINE_string('weights', './data/yolov4.weights', 'path to weights file')
 flags.DEFINE_string('output', './checkpoints/yolov4-416', 'path to output')
 flags.DEFINE_boolean('tiny', False, 'is yolo-tiny or not')
 flags.DEFINE_string('input_size', '416', 'define input size of export model. Use single value %d to make it square or use %dx%d format to make it rectangle')
+flags.DEFINE_integer('batch_size', 3, 'define input batch size')
 flags.DEFINE_float('iou_thres', 0.45, 'define IOU threshold')
 flags.DEFINE_float('score_thres', 0.25, 'define score threshold')
 flags.DEFINE_string('framework', 'tf', 'define what framework do you want to convert (tf, trt, tflite)')
@@ -19,7 +20,7 @@ def save_tf():
 
   input_width, input_height = utils.input_size(FLAGS.input_size)
 
-  input_layer = tf.keras.layers.Input((input_height, input_width, 3), 3)
+  input_layer = tf.keras.layers.Input((input_height, input_width, 3), FLAGS.batch_size)
   feature_maps = YOLO(input_layer, NUM_CLASS, FLAGS.model, FLAGS.tiny)
   bbox_tensors = []
   prob_tensors = []

@@ -368,16 +368,17 @@ def filter_boxes(box_xywh, scores, iou_threshold=0.45, score_threshold=0.25, max
             indexed_boxes = K.gather(boxes, indexes)
             indexed_boxes.set_shape((max_output_size, 4))
 
-            return indexed_boxes, indexed_scores, valid_boxes
+            scored_boxes = K.concatenate((indexed_boxes, K.expand_dims(indexed_scores)))
+
+            return scored_boxes, valid_boxes
 
         # Iterate over all classes. Thats why I reshape scores tenor to make classes count on the first dimension
-        # Output boxes (class_id, max_output_size, 4)
-        # Output scores (class_id, max_output_size, 1)
+        # Output scored boxes (class_id, max_output_size, 5) where (ymin, xmin, ymax, xmax, score)
         # Output valid boxes (class_id, 1)
-        return tf.map_fn(non_max_supression_inner, scores_by_classes, (tf.float32, tf.float32, tf.int32))
+        return tf.map_fn(non_max_supression_inner, scores_by_classes, (tf.float32, tf.int32))
 
     # Iterate over boxes and scores by batch size
-    return tf.map_fn(non_max_supression, (boxes, scores), (tf.float32, tf.float32, tf.int32))
+    return tf.map_fn(non_max_supression, (boxes, scores), (tf.float32, tf.int32))
 
 
 def compute_loss(pred, conv, label, bboxes, STRIDES, NUM_CLASS, IOU_LOSS_THRESH, i=0):

@@ -57,8 +57,7 @@ def main(_argv):
         if FLAGS.model == 'yolov3' and FLAGS.tiny == True:
             boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25, input_shape=tf.constant([input_height, input_width]))
         else:
-            boxes = pred[2]
-            scores = pred[0]
+            boxes = pred[0]
             valid_detections = pred[1]
     else:
         saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
@@ -69,7 +68,7 @@ def main(_argv):
             boxes = value[:, :, 0:4]
             pred_conf = value[:, :, 4:]
 
-    pred_bbox = [boxes, scores, valid_detections]
+    pred_bbox = [boxes, valid_detections]
     image = utils.draw_bbox(original_image, pred_bbox)
     # image = utils.draw_bbox(image_data*255, pred_bbox)
     image = Image.fromarray(image.astype(np.uint8))

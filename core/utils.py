@@ -135,7 +135,10 @@ def draw_bbox(image, bboxes, classes=read_class_names(cfg.YOLO.CLASSES), show_la
     random.shuffle(colors)
     random.seed(None)
 
-    out_boxes, out_scores, valid_detections = bboxes
+    out_scored_boxes, valid_detections = bboxes
+
+    out_boxes = out_scored_boxes[..., 0:4]
+    out_scores = out_scored_boxes[..., -1]
 
     for class_id in range(num_classes):
         for i in range(valid_detections[0][class_id]):

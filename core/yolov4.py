@@ -339,46 +339,52 @@ def filter_boxes(box_xywh, scores, iou_threshold=0.45, score_threshold=0.25, max
         box_maxes[..., 1:2]  # x_max
     ], axis=-1)
 
+    # Take indicies of the max class score for each box. This will give us class ids
+    box_classes = tf.argmax(scores, -1, tf.int32)
+    # Take max score for each box. This will give us class probability
+    box_class_scores = tf.reduce_max(scores, -1)
+
     def non_max_supression(input):
-        boxes, scores = input
+        boxes, box_classes, box_class_scores = input
 
-        scores_shape = tf.shape(scores)
+        # combined_non_max_suppression can't be used in the TF Lite. At least in 2.2.0
+        # https://github.com/tensorflow/tensorflow/issues/37301
+        indexes, indexed_scores = tf.image.non_max_suppression_with_scores(
+            boxes,
+            K.flatten(box_class_scores),
+            max_output_size,
+            iou_threshold,
+            score_threshold,
+        )
 
-        #(class_id, score)
-        scores_by_classes = tf.reshape(scores, (scores_shape[-1], -1))
+        # Count how many valid boxes in the image
+        valid_boxes = K.sum(
+            K.cast(K.greater(indexed_scores, score_threshold), tf.int32))
 
-        def non_max_supression_inner(scores):
-            # combined_non_max_suppression can't be used in the TF Lite. At least in 2.2.0
-            indexes, indexed_scores = tf.image.non_max_suppression_with_scores(
-                boxes,
-                K.flatten(scores),
-                max_output_size,
-                iou_threshold,
-                score_threshold,
-            )
+        indexes.set_shape((max_output_size))
+        indexed_scores.set_shape((max_output_size))
 
-            # Count how many valid boxes in the image
-            valid_boxes = K.sum(
-                K.cast(K.greater(indexed_scores, score_threshold), tf.int32))
+        # Get boxes by received indexes
+        indexed_boxes = K.gather(boxes, indexes)
+        indexed_boxes.set_shape((max_output_size, 4))
 
-            indexes.set_shape((max_output_size))
-            indexed_scores.set_shape((max_output_size))
+        # Get classes by index
+        indexed_box_class = K.gather(box_classes, indexes)
+        indexed_box_class.set_shape((max_output_size))
 
-            # Get boxes by received indexes
-            indexed_boxes = K.gather(boxes, indexes)
-            indexed_boxes.set_shape((max_output_size, 4))
+        # combine box with it score
+        scored_boxes = K.concatenate(
+            (indexed_boxes, K.expand_dims(indexed_scores)))
 
-            scored_boxes = K.concatenate((indexed_boxes, K.expand_dims(indexed_scores)))
-
-            return scored_boxes, valid_boxes
-
-        # Iterate over all classes. Thats why I reshape scores tenor to make classes count on the first dimension
-        # Output scored boxes (class_id, max_output_size, 5) where (ymin, xmin, ymax, xmax, score)
-        # Output valid boxes (class_id, 1)
-        return tf.map_fn(non_max_supression_inner, scores_by_classes, (tf.float32, tf.int32))
+        return scored_boxes, indexed_box_class, valid_boxes
 
     # Iterate over boxes and scores by batch size
-    return tf.map_fn(non_max_supression, (boxes, scores), (tf.float32, tf.int32))
+    #
+    # Output:
+    # * scored boxes (batch_size, max_output_size, 5) where (ymin, xmin, ymax, xmax, score)
+    # * class of a box (batch_size, 1) where last axis is class_id
+    # * valid boxes (batch_size, 1)
+    return tf.map_fn(non_max_supression, (boxes, box_classes, box_class_scores), (tf.float32, tf.int32, tf.int32))
 
 
 def compute_loss(pred, conv, label, bboxes, STRIDES, NUM_CLASS, IOU_LOSS_THRESH, i=0):

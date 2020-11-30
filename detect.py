@@ -40,25 +40,36 @@ def main(_argv):
     image_data = np.float32(image_data / 255.)
     # image_data = image_data[np.newaxis, ...].astype(np.float32)
 
-    empty_img = np.empty([input_height, input_width, 3], np.float32)
-    # Create batch width 3 images
-    images_data = np.stack([image_data, empty_img, empty_img])
-
     if FLAGS.framework == 'tflite':
         interpreter = tf.lite.Interpreter(model_path=FLAGS.weights)
         interpreter.allocate_tensors()
+
         input_details = interpreter.get_input_details()
         output_details = interpreter.get_output_details()
-        print(input_details)
-        print(output_details)
-        interpreter.set_tensor(input_details[0]['index'], images_data)
+
+        print(f"TFLite model input details: {input_details}")
+        print(f"TFLite model output details: {output_details}")
+
+        input_batch_size = input_details[0]['shape'][0]
+
+        if input_batch_size > 1:
+            empty_img = np.empty([input_height, input_width, 3], np.float32)
+            batch = [empty_img] * input_batch_size
+            batch[0] = image_data
+            # Create batch of images
+            image_data = np.stack(batch)
+
+        interpreter.set_tensor(input_details[0]['index'], image_data)
         interpreter.invoke()
+
         pred = [interpreter.get_tensor(output_details[i]['index']) for i in range(len(output_details))]
+
         if FLAGS.model == 'yolov3' and FLAGS.tiny == True:
             boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25, input_shape=tf.constant([input_height, input_width]))
         else:
             boxes = pred[0]
-            valid_detections = pred[1]
+            box_classes = pred[1]
+            valid_detections = pred[2]
     else:
         saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
         infer = saved_model_loaded.signatures['serving_default']
@@ -68,7 +79,7 @@ def main(_argv):
             boxes = value[:, :, 0:4]
             pred_conf = value[:, :, 4:]
 
-    pred_bbox = [boxes, valid_detections]
+    pred_bbox = [boxes, box_classes, valid_detections]
     image = utils.draw_bbox(original_image, pred_bbox)
     # image = utils.draw_bbox(image_data*255, pred_bbox)
     image = Image.fromarray(image.astype(np.uint8))
